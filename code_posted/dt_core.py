@@ -37,7 +37,6 @@ def get_splits(examples: List, feature: str) -> List[float]:
     feature_list = np.array(examples)
     # sort example by feature
     feature_list = feature_list[feature_list[:, feature_index].argsort()]
-    print(feature_list)
     prev = 0
     curr = 0
     prev_labels = []
@@ -55,19 +54,20 @@ def get_splits(examples: List, feature: str) -> List[float]:
             curr_labels.append(feature_list[i][dt_global.label_index])
     return split_points
 
-# def calculateEntropy(dataset):
-#     counter= defaultdict(int)   # number of unique labels and their frequency
-#     for record in dataset:      
-#         label = record[-1]      # always assuming last column is the label column 
-#         counter[label] += 1
-#     entropy = 0.0
-#     for key in counter:
-#         probability = counter[key]/len(dataset)           # len(dataSet) = number of entries   
-#         entropy -= probability * log(probability,2)       # log base 2
-#     return entropy
-
-# def expected_info_gain(examples, feature):
-
+def calculateEntropy(examples):
+    label_counter = {}
+    num_examples = len(examples)
+    for example in examples:
+        label = example[dt_global.label_index]
+        if label not in label_counter.keys():
+            label_counter[label] = 1
+        else:
+            label_counter[label] += 1
+    entropy = 0.0
+    for key in label_counter:
+        probability = label_counter[key]/num_examples  
+        entropy -= probability * math.log(probability,2)
+    return entropy
 
 def choose_feature_split(examples: List, features: List[str]) -> (str, float):
     """
@@ -87,14 +87,30 @@ def choose_feature_split(examples: List, features: List[str]) -> (str, float):
     :return: the best feature and the best split value
     :rtype: str, float
     """   
-    # best_feature = None
-    # best_split_point = -1
-    # for feature in features:
-    #     split_points = get_splits(examples, feature)
-    #     if len(split_points) != 0:
+    best_feature = None
+    best_split_point = -1
+    best_GI = 0
+    baseEntropy = calculateEntropy(examples)
+    for feature in features:
+        curr_best_gain = 0
+        curr_best_split = -1
+        split_points = get_splits(examples, feature)
+        if len(split_points) != 0:
+            for split in split_points:
+                list_less, list_more = split_examples(examples, feature, split)
+                less_entropy = calculateEntropy(list_less)
+                more_entropy = calculateEntropy(list_more)
+                gain_info = baseEntropy - (less_entropy + more_entropy)
+                # we want the largest gain_info
+                if gain_info > curr_best_gain:
+                    curr_best_gain = gain_info
+                    curr_best_split = split
+        if curr_best_gain > best_GI:
+            best_GI = curr_best_gain
+            best_split_point = curr_best_split
+            best_feature = feature
 
-    return None, -1
-
+    return best_feature, best_split_point
 
 def split_examples(examples: List, feature: str, split: float) -> (List, List):
     """
@@ -117,7 +133,6 @@ def split_examples(examples: List, feature: str, split: float) -> (List, List):
     list_more = []
     feature_index = dt_global.feature_names.index(feature)
     for example in examples:
-        print(feature_index)
         if example[feature_index] <= split:
             list_less.append(example)
         elif example[feature_index] > split:
@@ -142,6 +157,10 @@ def split_node(cur_node: Node, examples: List, features: List[str], max_depth=ma
     :param max_depth: the maximum depth of the tree
     :type max_depth: int
     """ 
+
+
+## Test
+# data = read_data("A2.csv")
 
 
 def learn_dt(examples: List, features: List[str], max_depth=math.inf) -> Node:
