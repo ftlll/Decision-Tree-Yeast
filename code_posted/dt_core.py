@@ -1,6 +1,6 @@
 import math
 from typing import List
-from anytree import Node
+from anytree import Node, RenderTree
 import numpy as np
 
 import dt_global 
@@ -100,7 +100,8 @@ def choose_feature_split(examples: List, features: List[str]) -> (str, float):
                 list_less, list_more = split_examples(examples, feature, split)
                 less_entropy = calculateEntropy(list_less)
                 more_entropy = calculateEntropy(list_more)
-                gain_info = baseEntropy - (less_entropy + more_entropy)
+                probability = len(list_less)/len(examples)
+                gain_info = baseEntropy - probability*less_entropy - (1 - probability) * more_entropy
                 # we want the largest gain_info
                 if gain_info > curr_best_gain:
                     curr_best_gain = gain_info
@@ -139,6 +140,25 @@ def split_examples(examples: List, feature: str, split: float) -> (List, List):
             list_more.append(example)
     return list_less, list_more
 
+def find_majority(examples):
+    label_counter = {}
+    res = -1
+    most_fre = -1
+    for example in examples:
+        label = example[dt_global.label_index]
+        if label not in label_counter.keys():
+            label_counter[label] = 1
+        else:
+            label_counter[label] += 1
+    for key in label_counter:
+        if label_counter[key] > most_fre:
+            most_fre = label_counter[key]
+            res = key
+        elif label_counter[key] == most_fre:
+            if key < res:
+                res = key
+    return res
+
 def split_node(cur_node: Node, examples: List, features: List[str], max_depth=math.inf):
     """
     Given a tree with cur_node as the root, some examples, some features, and the max depth,
@@ -157,11 +177,26 @@ def split_node(cur_node: Node, examples: List, features: List[str], max_depth=ma
     :param max_depth: the maximum depth of the tree
     :type max_depth: int
     """ 
-
-
-## Test
-# data = read_data("A2.csv")
-
+    feature, split = choose_feature_split(examples, features)
+    if feature == None:
+        decision = find_majority(examples)
+        node = Node("leaf", parent=cur_node ,decision=decision)
+    else:
+        list_less, list_more = split_examples(examples, feature, split)
+        if max_depth == 1:
+            # reached max depth, we need to use majority
+            if len(list_less) >= len(list_more):
+                decision = find_majority(list_less)
+            else:
+                decision = find_majority(list_more)
+            node = Node("leaf", parent=cur_node ,decision=decision)
+        else:
+            max_depth -= 1
+            node = Node("idk", parent = cur_node ,feature = feature, split = split)
+            # left for less than
+            split_node(node, list_less, features, max_depth)
+            # right for more than
+            split_node(node, list_more, features, max_depth)
 
 def learn_dt(examples: List, features: List[str], max_depth=math.inf) -> Node:
     """
@@ -184,9 +219,19 @@ def learn_dt(examples: List, features: List[str], max_depth=math.inf) -> Node:
     :return: the root of the tree
     :rtype: Node
     """ 
+    root_node = Node("root")
+    split_node(root_node, examples, features, max_depth)
+    return root_node
 
-    return None
-
+## Test
+data = read_data("A2.csv")
+input_feature_names = dt_global.feature_names[:-1]
+tree = learn_dt(data, input_feature_names)
+print(RenderTree(tree))
+# root = Node("root")
+# root2 = Node("wee", decision = 1, parent = root)
+# root1 = Node("wewe", decision = 1.2, parent = root)
+# print(root.children)
 
 def predict(cur_node: Node, example, max_depth=math.inf, \
     min_num_examples=0) -> int:
