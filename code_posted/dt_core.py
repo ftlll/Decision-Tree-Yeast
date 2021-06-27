@@ -4,7 +4,7 @@ from anytree import Node
 import numpy as np
 
 import dt_global 
-# from dt_provided import *
+from dt_provided import *
 
 def labels_same(prev_labels, curr_labels):
     prev_set = set()
@@ -55,11 +55,19 @@ def get_splits(examples: List, feature: str) -> List[float]:
             curr_labels.append(feature_list[i][dt_global.label_index])
     return split_points
 
-## Test
-# data = read_data("data.csv")
-# data_list = preprocess(data)
-# split_points = get_splits(data_list[0], "alm")
-# print(split_points)
+# def calculateEntropy(dataset):
+#     counter= defaultdict(int)   # number of unique labels and their frequency
+#     for record in dataset:      
+#         label = record[-1]      # always assuming last column is the label column 
+#         counter[label] += 1
+#     entropy = 0.0
+#     for key in counter:
+#         probability = counter[key]/len(dataset)           # len(dataSet) = number of entries   
+#         entropy -= probability * log(probability,2)       # log base 2
+#     return entropy
+
+# def expected_info_gain(examples, feature):
+
 
 def choose_feature_split(examples: List, features: List[str]) -> (str, float):
     """
@@ -79,6 +87,11 @@ def choose_feature_split(examples: List, features: List[str]) -> (str, float):
     :return: the best feature and the best split value
     :rtype: str, float
     """   
+    # best_feature = None
+    # best_split_point = -1
+    # for feature in features:
+    #     split_points = get_splits(examples, feature)
+    #     if len(split_points) != 0:
 
     return None, -1
 
@@ -100,9 +113,16 @@ def split_examples(examples: List, feature: str, split: float) -> (List, List):
     :return: two lists of examples split by the feature split
     :rtype: List[List[Any]], List[List[Any]]
     """ 
-
-    return None, None
-
+    list_less = []
+    list_more = []
+    feature_index = dt_global.feature_names.index(feature)
+    for example in examples:
+        print(feature_index)
+        if example[feature_index] <= split:
+            list_less.append(example)
+        elif example[feature_index] > split:
+            list_more.append(example)
+    return list_less, list_more
 
 def split_node(cur_node: Node, examples: List, features: List[str], max_depth=math.inf):
     """
