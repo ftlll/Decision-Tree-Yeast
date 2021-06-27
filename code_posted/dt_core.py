@@ -1,9 +1,24 @@
 import math
 from typing import List
 from anytree import Node
+import numpy as np
 
 import dt_global 
+# from dt_provided import *
 
+def labels_same(prev_labels, curr_labels):
+    prev_set = set()
+    curr_set = set()
+    for i in prev_labels:
+        prev_set.add(i)
+    for i in curr_labels:
+        curr_set.add(i)
+    if len(prev_set) == 1 and len(curr_set) == 1:
+        return list(prev_set)[0] == list(curr_set)[0]
+    elif len(prev_set) == 0 or len(curr_set) == 0:
+        return True
+    else:
+        return False
 
 def get_splits(examples: List, feature: str) -> List[float]:
     """
@@ -16,9 +31,35 @@ def get_splits(examples: List, feature: str) -> List[float]:
     :return: a list of potential split point values 
     :rtype: List[float]
     """ 
+    split_points = []
+    # get the index of feature in examples
+    feature_index = dt_global.feature_names.index(feature)
+    feature_list = np.array(examples)
+    # sort example by feature
+    feature_list = feature_list[feature_list[:, feature_index].argsort()]
+    print(feature_list)
+    prev = 0
+    curr = 0
+    prev_labels = []
+    curr_labels = []
+    for i in range(len(examples)):
+        new_cur = feature_list[i][feature_index]
+        if new_cur != curr:
+            prev = curr
+            curr = new_cur
+            prev_labels = curr_labels
+            curr_labels = [feature_list[i][dt_global.label_index]]
+            if not labels_same(prev_labels, curr_labels):
+                split_points.append( (prev+curr) / 2)
+        else:
+            curr_labels.append(feature_list[i][dt_global.label_index])
+    return split_points
 
-    return None
-
+## Test
+# data = read_data("data.csv")
+# data_list = preprocess(data)
+# split_points = get_splits(data_list[0], "alm")
+# print(split_points)
 
 def choose_feature_split(examples: List, features: List[str]) -> (str, float):
     """
