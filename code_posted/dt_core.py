@@ -1,22 +1,19 @@
 import math
+from os import major
 from typing import List
 from anytree import Node, RenderTree
 import numpy as np
 
 import dt_global 
 from dt_provided import *
-
+    
 def labels_same(prev_labels, curr_labels):
-    prev_set = set()
-    curr_set = set()
-    for i in prev_labels:
-        prev_set.add(i)
-    for i in curr_labels:
-        curr_set.add(i)
+    prev_set = set(prev_labels)
+    curr_set = set(curr_labels)
+    if len(prev_set) == 0:
+        return True
     if len(prev_set) == 1 and len(curr_set) == 1:
         return list(prev_set)[0] == list(curr_set)[0]
-    elif len(prev_set) == 0 or len(curr_set) == 0:
-        return True
     else:
         return False
 
@@ -34,24 +31,27 @@ def get_splits(examples: List, feature: str) -> List[float]:
     split_points = []
     # get the index of feature in examples
     feature_index = dt_global.feature_names.index(feature)
-    feature_list = np.array(examples)
+    examples = np.array(examples)
     # sort example by feature
-    feature_list = feature_list[feature_list[:, feature_index].argsort()]
+    examples = examples[examples[:, feature_index].argsort()]
     prev = 0
-    curr = 0
+    curr = examples[0][feature_index]
     prev_labels = []
-    curr_labels = []
-    for i in range(len(examples)):
-        new_cur = feature_list[i][feature_index]
+    curr_labels = [examples[0][dt_global.label_index]]
+    num_examples = len(examples)
+    for i in range(num_examples):
+        new_cur = examples[i][feature_index]
         if new_cur != curr:
+            if not labels_same(prev_labels, curr_labels):
+                split_points.append( (prev+curr) / 2)
             prev = curr
             curr = new_cur
             prev_labels = curr_labels
-            curr_labels = [feature_list[i][dt_global.label_index]]
-            if not labels_same(prev_labels, curr_labels):
-                split_points.append( (prev+curr) / 2)
+            curr_labels = [examples[i][dt_global.label_index]] 
         else:
-            curr_labels.append(feature_list[i][dt_global.label_index])
+            curr_labels.append(examples[i][dt_global.label_index])
+    if not labels_same(prev_labels, curr_labels):
+        split_points.append( (prev+curr) / 2)
     return split_points
 
 def calculateEntropy(examples):
@@ -65,8 +65,8 @@ def calculateEntropy(examples):
             label_counter[label] += 1
     entropy = 0.0
     for key in label_counter:
-        probability = label_counter[key]/num_examples  
-        entropy -= probability * math.log(probability,2)
+        probability = float(label_counter[key]/num_examples)  
+        entropy -= float(probability * math.log(probability) / math.log(2))
     return entropy
 
 def choose_feature_split(examples: List, features: List[str]) -> (str, float):
@@ -100,8 +100,9 @@ def choose_feature_split(examples: List, features: List[str]) -> (str, float):
                 list_less, list_more = split_examples(examples, feature, split)
                 less_entropy = calculateEntropy(list_less)
                 more_entropy = calculateEntropy(list_more)
-                probability = len(list_less)/len(examples)
-                gain_info = baseEntropy - probability*less_entropy - (1 - probability) * more_entropy
+                less_probability = float(len(list_less)/len(examples))
+                more_probability = float(len(list_more)/len(examples))
+                gain_info = baseEntropy - less_probability * less_entropy - more_probability * more_entropy
                 # we want the largest gain_info
                 if gain_info > curr_best_gain:
                     curr_best_gain = gain_info
@@ -110,7 +111,6 @@ def choose_feature_split(examples: List, features: List[str]) -> (str, float):
             best_GI = curr_best_gain
             best_split_point = curr_best_split
             best_feature = feature
-
     return best_feature, best_split_point
 
 def split_examples(examples: List, feature: str, split: float) -> (List, List):
@@ -180,19 +180,21 @@ def split_node(cur_node: Node, examples: List, features: List[str], max_depth=ma
     feature, split = choose_feature_split(examples, features)
     if feature == None:
         decision = find_majority(examples)
-        node = Node("leaf", parent=cur_node ,decision=decision)
+        node = Node("leaf", parent=cur_node, decision=decision, size=len(examples))
     else:
         list_less, list_more = split_examples(examples, feature, split)
-        if max_depth == 1:
+        if max_depth == 0:
             # reached max depth, we need to use majority
             if len(list_less) >= len(list_more):
                 decision = find_majority(list_less)
             else:
                 decision = find_majority(list_more)
-            node = Node("leaf", parent=cur_node ,decision=decision)
+            node = Node("leaf", parent=cur_node, decision=decision, size=len(examples))
         else:
             max_depth -= 1
-            node = Node("idk", parent = cur_node ,feature = feature, split = split)
+            decision = find_majority(examples)
+            node = Node("idk", parent = cur_node ,feature = feature, split = split, 
+                size=len(examples), decision = decision)
             # left for less than
             split_node(node, list_less, features, max_depth)
             # right for more than
@@ -219,19 +221,13 @@ def learn_dt(examples: List, features: List[str], max_depth=math.inf) -> Node:
     :return: the root of the tree
     :rtype: Node
     """ 
-    root_node = Node("root")
-    split_node(root_node, examples, features, max_depth)
+    feature, split = choose_feature_split(examples, features)
+    root_node = Node("root", feature=feature, split=split, 
+        size=len(examples), decision=find_majority(examples))
+    list_less, list_more = split_examples(examples, feature, split)
+    split_node(root_node, list_less, features, max_depth - 1)
+    split_node(root_node, list_more, features, max_depth - 1)
     return root_node
-
-## Test
-data = read_data("A2.csv")
-input_feature_names = dt_global.feature_names[:-1]
-tree = learn_dt(data, input_feature_names)
-print(RenderTree(tree))
-# root = Node("root")
-# root2 = Node("wee", decision = 1, parent = root)
-# root1 = Node("wewe", decision = 1.2, parent = root)
-# print(root.children)
 
 def predict(cur_node: Node, example, max_depth=math.inf, \
     min_num_examples=0) -> int:
@@ -261,9 +257,24 @@ def predict(cur_node: Node, example, max_depth=math.inf, \
     :return: the decision for the given example
     :rtype: int
     """ 
+    decision = cur_node.decision
+    # if it is a leaf, just stop it
+    if len(cur_node.children) == 0:
+        return decision
+    # if it is not a leaf, check the optional parameter
+    if max_depth == 0:
+        return decision
+    size = cur_node.size
+    if min_num_examples != 0 and size < min_num_examples:
+        return decision
 
-    return -1
+    feature_index = dt_global.feature_names.index(cur_node.feature)
 
+    if example[feature_index] <= cur_node.split:
+        index = 0
+    else:
+        index = 1
+    return predict(cur_node.children[index], example, max_depth - 1, min_num_examples)
 
 def get_prediction_accuracy(cur_node: Node, examples: List, max_depth=math.inf, \
     min_num_examples=0) -> float:
@@ -285,9 +296,14 @@ def get_prediction_accuracy(cur_node: Node, examples: List, max_depth=math.inf, 
     :return: the prediction accuracy for the examples based on the cur_node
     :rtype: float
     """ 
-
-    return -1
-
+    num = len(examples)
+    num_correct = 0
+    for example in examples:
+        prediction = predict(cur_node, example, max_depth, min_num_examples)
+        label = example[dt_global.label_index]
+        if prediction == label:
+            num_correct += 1
+    return float(num_correct / num)
 
 def post_prune(cur_node: Node, min_num_examples: float):
     """
@@ -308,3 +324,22 @@ def post_prune(cur_node: Node, min_num_examples: float):
     :param min_num_examples: the minimum number of examples
     :type min_num_examples: float
     """
+    # if we go to this step, it means for cur_node, size > min_num_examples
+    if len(cur_node.children) == 0:
+        return cur_node
+    else:
+        size = cur_node.size
+        children = cur_node.children
+        decision = cur_node.decision
+        if size < min_num_examples:
+            # we should not split
+            new_size = children[0].size + children[1].size
+            cur_node.name = "leaf"
+            cur_node.size = new_size
+            cur_node.decision = decision
+            cur_node.children = []
+            del cur_node.feature
+            del cur_node.split
+        else:
+            post_prune(children[0], min_num_examples)
+            post_prune(children[1], min_num_examples)
