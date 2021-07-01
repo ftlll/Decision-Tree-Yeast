@@ -1,11 +1,9 @@
 import math
 from os import major
 from typing import List
-from anytree import Node, RenderTree
-import numpy as np
+from anytree import Node
 
 import dt_global 
-from dt_provided import *
     
 def labels_same(prev_labels, curr_labels):
     prev_set = set(prev_labels)
@@ -31,9 +29,9 @@ def get_splits(examples: List, feature: str) -> List[float]:
     split_points = []
     # get the index of feature in examples
     feature_index = dt_global.feature_names.index(feature)
-    examples = np.array(examples)
-    # sort example by feature
-    examples = examples[examples[:, feature_index].argsort()]
+    # sort examples by feature
+    examples = list(map(list, examples))
+    examples.sort(key=lambda x: x[feature_index])
     prev = 0
     curr = examples[0][feature_index]
     prev_labels = []
@@ -56,7 +54,6 @@ def get_splits(examples: List, feature: str) -> List[float]:
 
 def calculateEntropy(examples):
     label_counter = {}
-    num_examples = len(examples)
     for example in examples:
         label = example[dt_global.label_index]
         if label not in label_counter.keys():
@@ -64,10 +61,16 @@ def calculateEntropy(examples):
         else:
             label_counter[label] += 1
     entropy = 0.0
+    num_examples = len(examples)
     for key in label_counter:
         probability = float(label_counter[key]/num_examples)  
         entropy -= float(probability * math.log(probability) / math.log(2))
     return entropy
+
+def float_greater(float1, float2):
+    if float1 > float2 + 0.00001:
+        return True
+    return False
 
 def choose_feature_split(examples: List, features: List[str]) -> (str, float):
     """
@@ -91,23 +94,27 @@ def choose_feature_split(examples: List, features: List[str]) -> (str, float):
     best_split_point = -1
     best_GI = 0
     baseEntropy = calculateEntropy(examples)
+    num_examples = len(examples)
     for feature in features:
         curr_best_gain = 0
         curr_best_split = -1
         split_points = get_splits(examples, feature)
-        if len(split_points) != 0:
+        if not split_points:
+            continue
+        else:
             for split in split_points:
                 list_less, list_more = split_examples(examples, feature, split)
                 less_entropy = calculateEntropy(list_less)
                 more_entropy = calculateEntropy(list_more)
-                less_probability = float(len(list_less)/len(examples))
-                more_probability = float(len(list_more)/len(examples))
-                gain_info = baseEntropy - less_probability * less_entropy - more_probability * more_entropy
+                less_probability = float(len(list_less)/num_examples)
+                more_probability = float(len(list_more)/num_examples)
+                ei = less_probability * less_entropy + more_probability * more_entropy
+                gain_info = baseEntropy - ei
                 # we want the largest gain_info
-                if gain_info > curr_best_gain:
+                if float_greater(gain_info, curr_best_gain):
                     curr_best_gain = gain_info
                     curr_best_split = split
-        if curr_best_gain > best_GI:
+        if float_greater(curr_best_gain, best_GI):
             best_GI = curr_best_gain
             best_split_point = curr_best_split
             best_feature = feature
@@ -142,14 +149,14 @@ def split_examples(examples: List, feature: str, split: float) -> (List, List):
 
 def find_majority(examples):
     label_counter = {}
-    res = -1
-    most_fre = -1
     for example in examples:
         label = example[dt_global.label_index]
         if label not in label_counter.keys():
             label_counter[label] = 1
         else:
             label_counter[label] += 1
+    res = -1
+    most_fre = -1
     for key in label_counter:
         if label_counter[key] > most_fre:
             most_fre = label_counter[key]
@@ -330,16 +337,16 @@ def post_prune(cur_node: Node, min_num_examples: float):
     else:
         size = cur_node.size
         children = cur_node.children
-        decision = cur_node.decision
+        # decision = cur_node.decision
         if size < min_num_examples:
             # we should not split
-            new_size = children[0].size + children[1].size
+            # new_size = children[0].size + children[1].size
             cur_node.name = "leaf"
-            cur_node.size = new_size
-            cur_node.decision = decision
+            # cur_node.size = new_size
+            # cur_node.decision = decision
             cur_node.children = []
-            del cur_node.feature
-            del cur_node.split
+            # del cur_node.feature
+            # del cur_node.split
         else:
             post_prune(children[0], min_num_examples)
             post_prune(children[1], min_num_examples)
